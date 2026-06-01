@@ -4,7 +4,7 @@
 
 ### Платформа визуальной разведки инфраструктуры
 
-<img src="https://github.com/user-attachments/assets/a931138b-a13c-4772-8b23-8f62f07ee7ed" width="100%">
+
 
 <br>
 
