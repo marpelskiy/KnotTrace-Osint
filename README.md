@@ -21,6 +21,9 @@
 
 ### 📊 Интерфейс
 
+<img width="845" height="474" alt="Screenshot_2026-05-30-235402" src="https://github.com/user-attachments/assets/a931138b-a13c-4772-8b23-8f62f07ee7ed" />
+---
+<img width="1336" height="763" alt="Screenshot_2026-05-30-230442" src="https://github.com/user-attachments/assets/18ad8267-d883-4a93-9627-8a3c75a3984f" />
 
 
 ---
