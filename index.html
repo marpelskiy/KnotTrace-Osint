@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KnotTrace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #0b0c0e; color: #E5E7EB; }
+        
+        .grid-bg {
+            background-color: #0b0c0e;
+            background-image: radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: center center;
+        }
+
+        #cy { width: 100%; height: 100%; }
+        
+        /* Плоские панели */
+        .flat-panel {
+            background-color: rgba(14, 15, 18, 0.95);
+            border-right: 1px solid #1f2228;
+            backdrop-filter: blur(8px);
+        }
+
+        .menu-panel {
+            background-color: #121418;
+            border: 1px solid #262930;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+        }
+
+        #sidebar { transition: transform 0.2s ease-in-out; }
+        .sidebar-hidden { transform: translateX(-100%); }
+
+        @keyframes simpleFadeOut {
+            0%, 70% { opacity: 1; visibility: visible; }
+            100% { opacity: 0; visibility: hidden; display: none; }
+        }
+        #intro-overlay { animation: simpleFadeOut 1s ease-out forwards; pointer-events: none; }
+
+        /* Скроллбар */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #262930; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3a3f4a; }
+        
+        input:focus, select:focus, button:focus { outline: none; }
+
+        /* Вкладки инструментов */
+        .tool-tab {
+            flex: 1; min-width: 36px; padding: 6px 4px;
+            font-size: 9px; font-weight: 600; letter-spacing: 0.04em;
+            color: #6B7280; background: transparent;
+            border-right: 1px solid #1f2228; border-bottom: 2px solid transparent;
+            transition: color 0.15s, border-color 0.15s; white-space: nowrap;
+        }
+        .tool-tab:last-child { border-right: none; }
+        .tool-tab:hover { color: #D1D5DB; }
+        .active-tab { color: #F9FAFB !important; border-bottom-color: #F9FAFB !important; }
+
+        /* Общие стили инпутов/кнопок в инструментах */
+        .tool-input {
+            width: 100%; background: #0b0c0e; border: 1px solid #262930;
+            border-radius: 4px; padding: 5px 8px; font-size: 11px;
+            color: #E5E7EB; transition: border-color 0.15s;
+        }
+        .tool-input:hover, .tool-input:focus { border-color: #3a3f4a; }
+        .tool-btn {
+            background: white; color: black; font-size: 11px; font-weight: 500;
+            padding: 6px 8px; border-radius: 4px; transition: background 0.15s;
+        }
+        .tool-btn:hover { background: #E5E7EB; }
+        .tool-btn:disabled { background: #9CA3AF; cursor: not-allowed; }
+        .tool-status { font-size: 10px; text-align: center; min-height: 14px; }
+
+        /* Стилизация палитры цветов */
+        input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            width: 100%;
+            height: 28px;
+            border-radius: 4px;
+            padding: 0;
+            cursor: pointer;
+            background: transparent;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 1px solid #333; border-radius: 4px; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden relative select-none grid-bg">
+
+    <!-- Интро -->
+    <div id="intro-overlay" class="absolute inset-0 bg-[#0b0c0e] z-50 flex flex-col items-center justify-center">
+        <h1 class="text-2xl font-semibold text-white tracking-tight">KnotTrace</h1>
+        <p class="text-[10px] text-gray-500 tracking-widest uppercase mt-2"></p>
+    </div>
+
+    <!-- Кнопка меню -->
+    <button onclick="toggleSidebar()" class="absolute top-4 left-4 z-30 bg-[#121418] border border-[#262930] text-gray-400 p-2 rounded hover:bg-[#1f2228] hover:text-white transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    </button>
+
+    <!-- Боковая панель -->
+    <div id="sidebar" class="w-72 p-5 pt-16 flex flex-col justify-between z-20 h-full absolute left-0 top-0 overflow-y-auto flat-panel">
+        <div class="space-y-6">
+            <div class="border-b border-[#1f2228] pb-4">
+                <h1 class="text-sm font-semibold text-gray-200 tracking-wide flex items-center gap-2">
+                    <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5"></path></svg>
+                    KnotTrace
+                </h1>
+            </div>
+            
+            <div class="space-y-3">
+                <h3 class="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Создать элемент</h3>
+                
+                <select id="new-node-type" onchange="updateDefaultColor('new-node-type', 'new-node-color')" class="w-full bg-[#0b0c0e] border border-[#262930] rounded px-3 py-2 text-xs text-gray-200 hover:border-[#3a3f4a] transition-colors">
+                    <option value="Text">Текст / Заметка</option>
+                    <option value="Person">Объект (ФИО)</option>
+                    <option value="Phone">Телефон</option>
+                    <option value="Email">Email</option>
+                    <option value="IP">IP адрес</option>
+                    <option value="Domain">Домен</option>
+                    <option value="Location">Адрес</option>
+                </select>
+
+                <div class="flex gap-2">
+                    <input type="text" id="new-node-label" placeholder="Значение" class="flex-1 bg-[#0b0c0e] border border-[#262930] rounded px-3 py-2 text-xs text-gray-200 placeholder-gray-600 hover:border-[#3a3f4a] transition-colors">
+                    <div class="w-8 shrink-0" title="Цвет узла">
+                        <input type="color" id="new-node-color" value="#4B5563">
+                    </div>
+                </div>
+
+                <button onclick="addNewNode()" class="w-full bg-white text-black hover:bg-gray-200 font-medium text-xs py-2 rounded transition-colors">
+                    Добавить
+                </button>
+            </div>
+            
+            <!-- ИНФО  -->
+            <div class="border border-[#1f2228] rounded overflow-hidden">
+                <div class="bg-[#121418] px-3 py-2 border-b border-[#1f2228]">
+                    <h3 class="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Инфо</h3>
+                </div>
+                <div id="node-info" class="p-3 text-xs bg-[#0b0c0e] min-h-[80px]">
+                    <p class="text-gray-600 italic text-center py-2">Узел не выбран</p>
+                </div>
+            </div>
+
+            <!-- ИНСТРУМЕНТЫ — вкладки -->
+            <div class="border border-[#1f2228] rounded overflow-hidden">
+                <div class="bg-[#121418] px-3 py-2 border-b border-[#1f2228]">
+                    <h3 class="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Инструменты</h3>
+                </div>
+                <div class="flex border-b border-[#1f2228] bg-[#0d0e11] overflow-x-auto">
+                    <button onclick="switchTab('scan')"       class="tool-tab active-tab" data-tab="scan">Scan</button>
+                    <button onclick="switchTab('subdomains')" class="tool-tab"            data-tab="subdomains">Sub</button>
+                    <button onclick="switchTab('dns')"        class="tool-tab"            data-tab="dns">DNS</button>
+                    <button onclick="switchTab('web')"        class="tool-tab"            data-tab="web">Web</button>
+                    <button onclick="switchTab('osint')"      class="tool-tab"            data-tab="osint">OSINT</button>
+                    <button onclick="switchTab('cert')"       class="tool-tab"            data-tab="cert">Cert</button>
+                    <button onclick="switchTab('inet')"       class="tool-tab"            data-tab="inet">iScan</button>
+                </div>
+
+                <!-- SCAN -->
+                <div id="tab-scan" class="tool-panel p-3 bg-[#0b0c0e] space-y-3">
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Nmap</p>
+                        <input id="nmap-target" type="text" placeholder="192.168.1.0/24" class="tool-input">
+                        <div class="flex gap-1">
+                            <select id="nmap-mode" class="tool-input w-24 text-[10px] px-1 shrink-0">
+                                <option value="quick">Быстро (-F)</option>
+                                <option value="full">Версии (-sV)</option>
+                                <option value="os">ОС (-O)</option>
+                                <option value="vuln">Уязв.</option>
+                            </select>
+                            <button onclick="runTool('nmap','nmap-target','nmap')" data-btn="nmap" class="tool-btn flex-1">Скан</button>
+                        </div>
+                        <div id="nmap-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Masscan</p>
+                        <input id="masscan-target" type="text" placeholder="10.0.0.0/8" class="tool-input">
+                        <button onclick="runTool('masscan','masscan-target','masscan')" data-btn="masscan" class="tool-btn w-full">Сканировать</button>
+                        <div id="masscan-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Naabu</p>
+                        <input id="naabu-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('naabu','naabu-target','naabu')" data-btn="naabu" class="tool-btn w-full">Сканировать</button>
+                        <div id="naabu-status" class="tool-status"></div>
+                    </div>
+                </div>
+
+                <!-- SUBDOMAINS -->
+                <div id="tab-subdomains" class="tool-panel hidden p-3 bg-[#0b0c0e] space-y-3">
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Subfinder</p>
+                        <input id="subfinder-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('subfinder','subfinder-target','subfinder')" data-btn="subfinder" class="tool-btn w-full">Найти</button>
+                        <div id="subfinder-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Amass</p>
+                        <input id="amass-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('amass','amass-target','amass')" data-btn="amass" class="tool-btn w-full">Найти</button>
+                        <div id="amass-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Findomain</p>
+                        <input id="findomain-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('findomain','findomain-target','findomain')" data-btn="findomain" class="tool-btn w-full">Найти</button>
+                        <div id="findomain-status" class="tool-status"></div>
+                    </div>
+                </div>
+
+                <!-- DNS -->
+                <div id="tab-dns" class="tool-panel hidden p-3 bg-[#0b0c0e] space-y-3">
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">DNS Lookup</p>
+                        <input id="dns-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('dns','dns-target','dns')" data-btn="dns" class="tool-btn w-full">Запросить</button>
+                        <div id="dns-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Whois</p>
+                        <input id="whois-target" type="text" placeholder="example.com или 8.8.8.8" class="tool-input">
+                        <button onclick="runTool('whois','whois-target','whois')" data-btn="whois" class="tool-btn w-full">Запросить</button>
+                        <div id="whois-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Reverse IP</p>
+                        <input id="revip-target" type="text" placeholder="8.8.8.8" class="tool-input">
+                        <button onclick="runTool('reverseip','revip-target','revip')" data-btn="revip" class="tool-btn w-full">Запросить</button>
+                        <div id="revip-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Fierce</p>
+                        <input id="fierce-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('fierce','fierce-target','fierce')" data-btn="fierce" class="tool-btn w-full">Запросить</button>
+                        <div id="fierce-status" class="tool-status"></div>
+                    </div>
+                </div>
+
+                <!-- WEB -->
+                <div id="tab-web" class="tool-panel hidden p-3 bg-[#0b0c0e] space-y-3">
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">WhatWeb</p>
+                        <input id="whatweb-target" type="text" placeholder="https://example.com" class="tool-input">
+                        <button onclick="runTool('whatweb','whatweb-target','whatweb')" data-btn="whatweb" class="tool-btn w-full">Анализировать</button>
+                        <div id="whatweb-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">httpx</p>
+                        <input id="httpx-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('httpx','httpx-target','httpx')" data-btn="httpx" class="tool-btn w-full">Проверить</button>
+                        <div id="httpx-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Nikto</p>
+                        <input id="nikto-target" type="text" placeholder="https://example.com" class="tool-input">
+                        <button onclick="runTool('nikto','nikto-target','nikto')" data-btn="nikto" class="tool-btn w-full">Сканировать</button>
+                        <div id="nikto-status" class="tool-status"></div>
+                    </div>
+                </div>
+
+                <!-- OSINT -->
+                <div id="tab-osint" class="tool-panel hidden p-3 bg-[#0b0c0e] space-y-3">
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Sherlock</p>
+                        <input id="sherlock-target" type="text" placeholder="username" class="tool-input">
+                        <button onclick="runTool('sherlock','sherlock-target','sherlock')" data-btn="sherlock" class="tool-btn w-full">Найти</button>
+                        <div id="sherlock-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Maigret</p>
+                        <input id="maigret-target" type="text" placeholder="username" class="tool-input">
+                        <button onclick="runTool('maigret','maigret-target','maigret')" data-btn="maigret" class="tool-btn w-full">Найти</button>
+                        <div id="maigret-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">PhoneInfoga</p>
+                        <input id="phoneinfoga-target" type="text" placeholder="+380 999 999 " class="tool-input">
+                        <button onclick="runTool('phoneinfoga','phoneinfoga-target','phoneinfoga')" data-btn="phoneinfoga" class="tool-btn w-full">Найти</button>
+                        <div id="phoneinfoga-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">SpiderFoot</p>
+                        <input id="spiderfoot-target" type="text" placeholder="domain / IP / email" class="tool-input">
+                        <button onclick="runTool('spiderfoot','spiderfoot-target','spiderfoot')" data-btn="spiderfoot" class="tool-btn w-full">Запустить</button>
+                        <div id="spiderfoot-status" class="tool-status"></div>
+                    </div>
+                </div>
+
+                <!-- CERT -->
+                <div id="tab-cert" class="tool-panel hidden p-3 bg-[#0b0c0e] space-y-3">
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">crt.sh</p>
+                        <input id="crtsh-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('crtsh','crtsh-target','crtsh')" data-btn="crtsh" class="tool-btn w-full">Найти сертификаты</button>
+                        <div id="crtsh-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">CertSpotter</p>
+                        <input id="certspotter-target" type="text" placeholder="example.com" class="tool-input">
+                        <button onclick="runTool('certspotter','certspotter-target','certspotter')" data-btn="certspotter" class="tool-btn w-full">Найти сертификаты</button>
+                        <div id="certspotter-status" class="tool-status"></div>
+                    </div>
+                </div>
+
+                <!-- INTERNET SCANNER -->
+                <div id="tab-inet" class="tool-panel hidden p-3 bg-[#0b0c0e] space-y-3">
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Shodan</p>
+                        <input id="shodan-key" type="password" placeholder="API ключ Shodan" class="tool-input">
+                        <input id="shodan-target" type="text" placeholder="IP или поисковый запрос" class="tool-input">
+                        <button onclick="runTool('shodan','shodan-target','shodan')" data-btn="shodan" class="tool-btn w-full">Поиск</button>
+                        <div id="shodan-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">Censys</p>
+                        <input id="censys-id" type="text" placeholder="API ID" class="tool-input">
+                        <input id="censys-secret" type="password" placeholder="API Secret" class="tool-input">
+                        <input id="censys-target" type="text" placeholder="IP или домен" class="tool-input">
+                        <button onclick="runTool('censys','censys-target','censys')" data-btn="censys" class="tool-btn w-full">Поиск</button>
+                        <div id="censys-status" class="tool-status"></div>
+                    </div>
+                    <div class="border-t border-[#1a1d22]"></div>
+                    <div class="space-y-1.5">
+                        <p class="text-[9px] text-gray-500 uppercase tracking-widest">ZoomEye</p>
+                        <input id="zoomeye-key" type="password" placeholder="API ключ ZoomEye" class="tool-input">
+                        <input id="zoomeye-target" type="text" placeholder="IP или поисковый запрос" class="tool-input">
+                        <button onclick="runTool('zoomeye','zoomeye-target','zoomeye')" data-btn="zoomeye" class="tool-btn w-full">Поиск</button>
+                        <div id="zoomeye-status" class="tool-status"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="space-y-2 pt-4 mt-4 border-t border-[#1f2228]">
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="exportKnotTrace()" class="bg-[#121418] hover:bg-[#1f2228] border border-[#262930] text-gray-300 text-[11px] py-2 rounded transition-colors">Экспорт</button>
+                <label class="bg-[#121418] hover:bg-[#1f2228] border border-[#262930] text-gray-300 text-[11px] py-2 rounded transition-colors text-center cursor-pointer flex items-center justify-center">
+                    Импорт
+                    <input type="file" id="file-input" accept=".knottrace" class="hidden" onchange="importKnotTrace(this)">
+                </label>
+            </div>
+            <button onclick="resetLayout()" class="w-full bg-[#0b0c0e] hover:bg-[#121418] border border-[#1f2228] text-gray-500 hover:text-gray-300 text-[11px] py-2 rounded transition-colors">Выровнять график</button>
+        </div>
+    </div>
+
+    <!-- Всплывающее меню быстрого создания -->
+    <div id="quick-add-menu" class="hidden absolute z-40 menu-panel p-3 rounded-lg w-52 transform -translate-x-1/2 -translate-y-1/2">
+        <div class="space-y-2">
+            <select id="quick-type" onchange="updateDefaultColor('quick-type', 'quick-color')" class="w-full bg-[#0b0c0e] border border-[#262930] rounded px-2 py-1.5 text-[11px] text-gray-200">
+                <option value="Text">Текст</option>
+                <option value="Person">Объект (ФИО)</option>
+                <option value="Phone">Телефон</option>
+                <option value="Email">Email</option>
+                <option value="IP">IP / Сеть</option>
+                <option value="Domain">Домен</option>
+                <option value="Location">Адрес</option>
+            </select>
+            <div class="flex gap-2">
+                <input type="text" id="quick-label" placeholder="Значение..." class="flex-1 bg-[#0b0c0e] border border-[#262930] rounded px-2 py-1.5 text-[11px] text-white">
+                <div class="w-6 shrink-0">
+                    <input type="color" id="quick-color" value="#4B5563" class="h-full">
+                </div>
+            </div>
+            <div class="flex gap-1.5 pt-1">
+                <button onclick="confirmQuickAdd()" class="flex-1 bg-white hover:bg-gray-200 text-black text-[11px] font-medium py-1.5 rounded transition-colors">Ок</button>
+                <button onclick="closeQuickAdd()" class="flex-1 bg-[#1f2228] hover:bg-[#262930] text-gray-300 text-[11px] font-medium py-1.5 rounded transition-colors">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Диалог редактирования узла (двойной клик) -->
+    <div id="edit-node-modal" class="hidden absolute z-40 menu-panel p-3 rounded-lg w-56 transform -translate-x-1/2 -translate-y-1/2">
+        <div class="space-y-2">
+            <p class="text-[10px] text-gray-500 uppercase tracking-widest">Редактировать</p>
+            <textarea id="edit-node-input" rows="3" class="w-full bg-[#0b0c0e] border border-[#262930] rounded px-2 py-1.5 text-[11px] text-white placeholder-gray-600 resize-none"></textarea>
+            <div class="flex gap-1.5 pt-1">
+                <button onclick="confirmEditNode()" class="flex-1 bg-white hover:bg-gray-200 text-black text-[11px] font-medium py-1.5 rounded transition-colors">Сохранить</button>
+                <button onclick="cancelEditNode()" class="flex-1 bg-[#1f2228] hover:bg-[#262930] text-gray-300 text-[11px] font-medium py-1.5 rounded transition-colors">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Диалог редактирования метки связи (двойной клик) -->
+    <div id="edit-edge-modal" class="hidden absolute z-40 menu-panel p-3 rounded-lg w-52 transform -translate-x-1/2 -translate-y-1/2">
+        <div class="space-y-2">
+            <p class="text-[10px] text-gray-500 uppercase tracking-widest">Метка связи</p>
+            <input type="text" id="edit-edge-input" placeholder="Введите тип связи" class="w-full bg-[#0b0c0e] border border-[#262930] rounded px-2 py-1.5 text-[11px] text-white placeholder-gray-600">
+            <div class="flex gap-1.5 pt-1">
+                <button onclick="confirmEditEdge()" class="flex-1 bg-white hover:bg-gray-200 text-black text-[11px] font-medium py-1.5 rounded transition-colors">Сохранить</button>
+                <button onclick="cancelEditEdge()" class="flex-1 bg-[#1f2228] hover:bg-[#262930] text-gray-300 text-[11px] font-medium py-1.5 rounded transition-colors">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Диалог метки связи -->
+    <div id="edge-label-modal" class="hidden absolute z-40 menu-panel p-3 rounded-lg w-52 transform -translate-x-1/2 -translate-y-1/2">
+        <div class="space-y-2">
+            <p class="text-[10px] text-gray-500 uppercase tracking-widest">Метка (необязательно)</p>
+            <input type="text" id="edge-label-input" placeholder="Введите метку" class="w-full bg-[#0b0c0e] border border-[#262930] rounded px-2 py-1.5 text-[11px] text-white placeholder-gray-600">
+            <p class="text-[10px] text-gray-500 uppercase tracking-widest pt-1">Тип линии</p>
+            <div class="flex gap-1.5">
+                <button onclick="selectLineStyle('solid', this)" id="line-btn-solid" class="flex-1 bg-white text-black text-[11px] font-medium py-1.5 rounded transition-colors">——</button>
+                <button onclick="selectLineStyle('dashed', this)" id="line-btn-dashed" class="flex-1 bg-[#1f2228] hover:bg-[#262930] text-gray-300 text-[11px] font-medium py-1.5 rounded transition-colors">- - -</button>
+                <button onclick="selectLineStyle('double', this)" id="line-btn-double" class="flex-1 bg-[#1f2228] hover:bg-[#262930] text-gray-300 text-[11px] font-medium py-1.5 rounded transition-colors">⇒</button>
+            </div>
+            <div class="flex gap-1.5 pt-1">
+                <button onclick="confirmEdgeLabel()" class="flex-1 bg-white hover:bg-gray-200 text-black text-[11px] font-medium py-1.5 rounded transition-colors">Ок</button>
+                <button onclick="cancelEdgeLabel()" class="flex-1 bg-[#1f2228] hover:bg-[#262930] text-gray-300 text-[11px] font-medium py-1.5 rounded transition-colors">Пропустить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Контейнер Графа -->
+    <div class="flex-1 relative w-full h-full">
+        <div id="cy"></div>
+    </div>
+
+    <script>
+        // Дефолтная палитра цветов для типов
+        const typeColors = {
+            'Text': '#4B5563', 'Person': '#3B82F6', 'Email': '#10B981', 
+            'Phone': '#F59E0B', 'IP': '#8B5CF6', 'Domain': '#EC4899', 'Location': '#EF4444'
+        };
+
+        function updateDefaultColor(selectId, colorInputId) {
+            const type = document.getElementById(selectId).value;
+            document.getElementById(colorInputId).value = typeColors[type] || '#4B5563';
+        }
+
+        let initialElements = [
+            { data: { id: 'target', label: 'Marpel', type: 'Person', color: '#3B82F6' } },
+            { data: { id: 'note1', label: 'Заметка:\nПроверить объект', type: 'Text', color: '#4B5563' } },
+            { data: { id: 'phone1', label: '+380 999 999 999', type: 'Phone', color: '#F59E0B' } },
+            { data: { id: 'e1', source: 'target', target: 'note1' } },
+            { data: { id: 'e2', source: 'note1', target: 'phone1' } }
+        ];
+
+        const cy = cytoscape({
+            container: document.getElementById('cy'),
+            elements: initialElements,
+            style: [
+                /* БАЗОВЫЕ УЗЛЫ */
+                {
+                    selector: 'node[type != "Text"]',
+                    style: {
+                        'label': 'data(label)',
+                        'color': '#9CA3AF',
+                        'font-size': '11px',
+                        'font-weight': '400',
+                        'font-family': 'system-ui, sans-serif',
+                        'text-valign': 'bottom',
+                        'text-margin-y': '6px',
+                        'width': '30px', 
+                        'height': '30px',
+                        'background-color': '#121418',
+                        'border-width': '1.5px',
+                        'border-color': function(ele){ return ele.data('color') || '#ffffff'; },
+                        'background-fit': 'contain',
+                        'background-width': '50%',
+                        'background-height': '50%'
+                    }
+                },
+                /* ТЕКСТОВЫЕ БЛОКИ */
+                {
+                    selector: 'node[type="Text"]',
+                    style: {
+                        'label': 'data(label)',
+                        'shape': 'round-rectangle',
+                        'background-color': '#121418',
+                        'border-width': '1px',
+                        'border-color': function(ele){ return ele.data('color') || '#333'; },
+                        'color': '#D1D5DB',
+                        'font-size': '11px',
+                        'font-family': 'system-ui, sans-serif',
+                        'text-valign': 'center',
+                        'text-halign': 'center',
+                        'text-wrap': 'wrap',
+                        'text-max-width': '220px',
+                        'padding': '10px',
+                        'width': 'label',
+                        'height': 'label'
+                    }
+                },
+                /* МИНИМАЛИСТИЧНЫЕ ИКОНКИ LUCIDE (Тонкие линии) */
+                { selector: 'node[type="Person"]', style: { 'background-image': 'https://api.iconify.design/lucide:user.svg?color=%23D1D5DB&strokeWidth=1.5' } },
+                { selector: 'node[type="Email"]', style: { 'background-image': 'https://api.iconify.design/lucide:mail.svg?color=%23D1D5DB&strokeWidth=1.5' } },
+                { selector: 'node[type="Phone"]', style: { 'background-image': 'https://api.iconify.design/lucide:phone.svg?color=%23D1D5DB&strokeWidth=1.5' } },
+                { selector: 'node[type="IP"]', style: { 'background-image': 'https://api.iconify.design/lucide:network.svg?color=%23D1D5DB&strokeWidth=1.5' } },
+                { selector: 'node[type="Domain"]', style: { 'background-image': 'https://api.iconify.design/lucide:globe.svg?color=%23D1D5DB&strokeWidth=1.5' } },
+                { selector: 'node[type="Location"]', style: { 'background-image': 'https://api.iconify.design/lucide:map-pin.svg?color=%23D1D5DB&strokeWidth=1.5' } },
+                
+                /* СВЯЗИ */
+                {
+                    selector: 'edge',
+                    style: {
+                        'width': 1,
+                        'line-color': '#2a2d35', 
+                        'curve-style': 'bezier',
+                        'target-arrow-shape': 'triangle',
+                        'target-arrow-color': '#2a2d35',
+                        'arrow-scale': 0.8,
+                        'label': 'data(edgeLabel)',
+                        'font-size': '9px',
+                        'color': '#6B7280',
+                        'text-rotation': 'autorotate',
+                        'text-margin-y': '-8px',
+                        'font-family': 'system-ui, sans-serif'
+                    }
+                },
+                /* ПУНКТИРНАЯ СВЯЗЬ */
+                {
+                    selector: 'edge[lineStyle="dashed"]',
+                    style: { 'line-style': 'dashed', 'line-dash-pattern': [6, 3] }
+                },
+                /* ДВОЙНАЯ СТРЕЛКА */
+                {
+                    selector: 'edge[lineStyle="double"]',
+                    style: { 'source-arrow-shape': 'triangle', 'source-arrow-color': '#2a2d35' }
+                },
+                /* ВЫДЕЛЕНИЕ */
+                {
+                    selector: 'node:selected',
+                    style: { 'border-width': '2.5px', 'border-color': '#FFFFFF' }
+                },
+                /* КОННЕКТОР СВЯЗИ */
+                {
+                    selector: '.native-handle',
+                    style: {
+                        'width': 14,
+                        'height': 14,
+                        'background-color': '#FFFFFF',
+                        'label': '+',
+                        'color': '#000000',
+                        'font-size': '12px',
+                        'font-weight': 'bold',
+                        'text-valign': 'center',
+                        'text-halign': 'center',
+                        'text-margin-y': '1px',
+                        'events': 'yes',
+                        'z-index': 999
+                    }
+                },
+                {
+                    selector: '.ghost-edge',
+                    style: { 'width': 1, 'line-color': '#6B7280', 'line-style': 'dashed', 'target-arrow-shape': 'triangle', 'target-arrow-color': '#6B7280' }
+                },
+                {
+                    selector: '.target-hover',
+                    style: { 'border-color': '#FFFFFF' }
+                }
+            ],
+            layout: { name: 'cose', animate: false }
+        });
+
+        setTimeout(() => { resetLayout(); }, 100);
+
+        // ==========================================
+        // ДВОЙНОЙ КЛИК ПО ФОНУ
+        // ==========================================
+        let lastTapTime = 0;
+        let quickAddGraphPosition = { x: 0, y: 0 };
+        const menuDOM = document.getElementById('quick-add-menu');
+        const labelInputDOM = document.getElementById('quick-label');
+
+        cy.on('tap', function(e) {
+            let currentTime = new Date().getTime();
+            let tapInterval = currentTime - lastTapTime;
+
+            if (tapInterval < 300 && tapInterval > 0 && e.target === cy) {
+                quickAddGraphPosition = e.position;
+                menuDOM.style.left = e.renderedPosition.x + 'px';
+                menuDOM.style.top = e.renderedPosition.y + 'px';
+                menuDOM.classList.remove('hidden');
+                setTimeout(() => labelInputDOM.focus(), 50);
+            } else {
+                if(e.target === cy) {
+                    closeQuickAdd();
+                    cy.nodes('.native-handle').remove();
+                    activeNode = null;
+                    handleNode = null;
+                }
+            }
+            lastTapTime = currentTime;
+        });
+
+        function closeQuickAdd() {
+            menuDOM.classList.add('hidden');
+            labelInputDOM.value = '';
+        }
+
+        function confirmQuickAdd() {
+            const type = document.getElementById('quick-type').value;
+            const label = labelInputDOM.value.trim();
+            const color = document.getElementById('quick-color').value;
+            if (!label) { labelInputDOM.focus(); return; }
+
+            cy.add({
+                group: 'nodes',
+                data: { id: 'node_' + Date.now(), label: label, type: type, color: color },
+                position: quickAddGraphPosition
+            });
+            closeQuickAdd();
+        }
+
+        labelInputDOM.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') confirmQuickAdd();
+        });
+
+        // ==========================================
+        // УМНАЯ СИСТЕМА СВЯЗЕЙ V3
+        // ==========================================
+        let activeNode = null;
+        let handleNode = null;
+
+        function getHandlePosition(node) {
+            let bb = node.boundingBox(); 
+            return { x: bb.x2 + 8, y: bb.y1 - 8 }; 
+        }
+
+        cy.on('tap', 'node', function(e) {
+            let node = e.target;
+            if(node.hasClass('native-handle')) return;
+            
+            closeQuickAdd(); 
+            cy.nodes('.native-handle').remove(); 
+            
+            activeNode = node;
+            
+            handleNode = cy.add({
+                group: 'nodes',
+                classes: 'native-handle',
+                position: getHandlePosition(node),
+                data: { id: 'handle_' + Date.now() },
+                grabbable: true
+            });
+
+            cy.add({
+                group: 'edges',
+                classes: 'ghost-edge',
+                data: { id: 'ghost_edge_' + Date.now(), source: activeNode.id(), target: handleNode.id() }
+            });
+        });
+
+        cy.on('position', 'node', function(e) {
+            let node = e.target;
+            if(activeNode && node.id() === activeNode.id() && handleNode) {
+                handleNode.position(getHandlePosition(node));
+            }
+        });
+
+        cy.on('drag', '.native-handle', function(e) {
+            let dropPos = e.target.position();
+            let pad = 20;
+            cy.nodes().removeClass('target-hover');
+            cy.nodes().forEach(n => {
+                if (n.hasClass('native-handle') || (activeNode && n.id() === activeNode.id())) return;
+                let bb = n.boundingBox();
+                if (dropPos.x >= (bb.x1 - pad) && dropPos.x <= (bb.x2 + pad) && dropPos.y >= (bb.y1 - pad) && dropPos.y <= (bb.y2 + pad)) {
+                    n.addClass('target-hover');
+                }
+            });
+        });
+
+        cy.on('free', '.native-handle', function(e) {
+            let handle = e.target;
+            let dropPos = handle.position();
+            let targetNode = null;
+            let pad = 20;
+
+            cy.nodes().removeClass('target-hover');
+
+            cy.nodes().forEach(n => {
+                if (n.hasClass('native-handle') || (activeNode && n.id() === activeNode.id())) return;
+                let bb = n.boundingBox();
+                if (dropPos.x >= (bb.x1 - pad) && dropPos.x <= (bb.x2 + pad) && dropPos.y >= (bb.y1 - pad) && dropPos.y <= (bb.y2 + pad)) {
+                    targetNode = n;
+                }
+            });
+
+            if (targetNode && activeNode) {
+                if(activeNode.edgesWith(targetNode).length === 0) { 
+                    pendingEdge = { source: activeNode.id(), target: targetNode.id() };
+                    showEdgeLabelModal(e.target.position());
+                }
+            }
+
+            cy.nodes('.native-handle').remove();
+            activeNode = null;
+            handleNode = null;
+        });
+
+        // ==========================================
+        // МЕТКИ НА СВЯЗЯХ
+        // ==========================================
+        let pendingEdge = null;
+        let selectedLineStyle = 'solid';
+        const edgeLabelModal = document.getElementById('edge-label-modal');
+        const edgeLabelInput = document.getElementById('edge-label-input');
+
+        function selectLineStyle(style, btn) {
+            selectedLineStyle = style;
+            ['solid','dashed','double'].forEach(s => {
+                const b = document.getElementById('line-btn-' + s);
+                b.classList.remove('bg-white', 'text-black', 'bg-[#1f2228]', 'text-gray-300');
+                if (s === style) { b.classList.add('bg-white', 'text-black'); }
+                else { b.classList.add('bg-[#1f2228]', 'text-gray-300'); }
+            });
+        }
+
+        function showEdgeLabelModal(graphPos) {
+            const container = document.getElementById('cy');
+            const rect = container.getBoundingClientRect();
+            const zoom = cy.zoom();
+            const pan = cy.pan();
+            const screenX = graphPos.x * zoom + pan.x + rect.left;
+            const screenY = graphPos.y * zoom + pan.y + rect.top;
+
+            edgeLabelModal.style.left = (screenX - rect.left) + 'px';
+            edgeLabelModal.style.top = (screenY - rect.top) + 'px';
+            edgeLabelModal.classList.remove('hidden');
+            edgeLabelInput.value = '';
+            selectedLineStyle = 'solid';
+            selectLineStyle('solid', null);
+            setTimeout(() => edgeLabelInput.focus(), 50);
+        }
+
+        function confirmEdgeLabel() {
+            if (pendingEdge) {
+                const label = edgeLabelInput.value.trim();
+                cy.add({ group: 'edges', data: { source: pendingEdge.source, target: pendingEdge.target, id: 'edge_' + Date.now(), edgeLabel: label, lineStyle: selectedLineStyle } });
+                pendingEdge = null;
+            }
+            edgeLabelModal.classList.add('hidden');
+            edgeLabelInput.value = '';
+        }
+
+        function cancelEdgeLabel() {
+            if (pendingEdge) {
+                cy.add({ group: 'edges', data: { source: pendingEdge.source, target: pendingEdge.target, id: 'edge_' + Date.now(), edgeLabel: '', lineStyle: 'solid' } });
+                pendingEdge = null;
+            }
+            edgeLabelModal.classList.add('hidden');
+            edgeLabelInput.value = '';
+        }
+
+        edgeLabelInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') confirmEdgeLabel();
+        });
+
+        // ==========================================
+        // УДАЛЕНИЕ ПО DELETE / BACKSPACE
+        // ==========================================
+        document.addEventListener('keydown', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                const selected = cy.$(':selected').filter(el => !el.hasClass('native-handle') && !el.hasClass('ghost-edge'));
+                if (selected.length > 0) {
+                    selected.remove();
+                    document.getElementById('node-info').innerHTML = '<p class="text-gray-600 italic text-center py-2">Узел не выбран</p>';
+                    inspectedNode = null;
+                }
+            }
+        });
+
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('sidebar-hidden'); }
+
+        function addNewNode() {
+            const type = document.getElementById('new-node-type').value;
+            const label = document.getElementById('new-node-label').value.trim();
+            const color = document.getElementById('new-node-color').value;
+            if (!label) return;
+            
+            let extent = cy.extent();
+            let centerPos = { x: extent.x1 + (extent.w/2), y: extent.y1 + (extent.h/2) };
+
+            cy.add({ group: 'nodes', data: { id: 'node_' + Date.now(), label: label, type: type, color: color }, position: centerPos });
+            document.getElementById('new-node-label').value = '';
+        }
+
+        let inspectedNode = null;
+        
+        cy.on('tap', 'node', function(evt){
+            if (evt.target.hasClass('native-handle')) return;
+            inspectedNode = evt.target;
+            const data = inspectedNode.data();
+
+            document.getElementById('node-info').innerHTML = `
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="text-gray-500 block text-[10px] uppercase mb-1">Цвет и Тип</span>
+                            <span class="font-medium text-gray-300 text-[11px]">${data.type}</span>
+                        </div>
+                        <div class="w-6 h-6 border border-[#262930] rounded overflow-hidden">
+                            <input type="color" id="edit-node-color" value="${data.color || '#ffffff'}" onchange="changeNodeColor(this.value)" class="w-full h-full scale-150">
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-gray-500 block text-[10px] uppercase mb-1">Данные</span>
+                        <div class="text-gray-200 bg-[#121418] p-2 rounded border border-[#262930] whitespace-pre-wrap break-words">${data.label}</div>
+                    </div>
+                </div>
+            `;
+        });
+
+        function changeNodeColor(newColor) {
+            if(inspectedNode) {
+                inspectedNode.data('color', newColor);
+            }
+        }
+
+        function exportKnotTrace() {
+            const graphData = cy.elements().filter(el => !el.hasClass('native-handle') && !el.hasClass('ghost-edge')).jsons();
+            const blob = new Blob([JSON.stringify(graphData, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+            link.download = `Graph_${Date.now()}.knottrace`;
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        }
+        function importKnotTrace(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try { cy.json({ elements: JSON.parse(e.target.result) }); resetLayout(); } catch (err) { alert('Ошибка файла'); }
+            };
+            reader.readAsText(file); input.value = '';
+        }
+
+        function resetLayout() {
+            cy.elements().filter(el => !el.hasClass('native-handle') && !el.hasClass('ghost-edge')).layout({ name: 'cose', animate: true, nodeRepulsion: function() { return 6000; } }).run();
+        }
+        const editNodeModal = document.getElementById('edit-node-modal');
+        const editNodeInput = document.getElementById('edit-node-input');
+        let editingNode = null;
+
+        cy.on('dblclick', 'node', function(e) {
+            if (e.target.hasClass('native-handle')) return;
+            editingNode = e.target;
+            const pos = e.renderedPosition;
+            editNodeModal.style.left = pos.x + 'px';
+            editNodeModal.style.top = pos.y + 'px';
+            editNodeModal.classList.remove('hidden');
+            editNodeInput.value = editingNode.data('label') || '';
+            setTimeout(() => { editNodeInput.focus(); editNodeInput.select(); }, 50);
+        });
+
+        function confirmEditNode() {
+            if (editingNode) {
+                const val = editNodeInput.value.trim();
+                if (val) editingNode.data('label', val);
+            }
+            editNodeModal.classList.add('hidden');
+            editingNode = null;
+        }
+
+        function cancelEditNode() {
+            editNodeModal.classList.add('hidden');
+            editingNode = null;
+        }
+
+        editNodeInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); confirmEditNode(); }
+            if (e.key === 'Escape') cancelEditNode();
+        });
+
+        // ==========================================
+        // ДВОЙНОЙ КЛИК — РЕДАКТИРОВАНИЕ МЕТКИ СВЯЗИ
+        // ==========================================
+        const editEdgeModal = document.getElementById('edit-edge-modal');
+        const editEdgeInput = document.getElementById('edit-edge-input');
+        let editingEdge = null;
+
+        cy.on('dblclick', 'edge', function(e) {
+            if (e.target.hasClass('ghost-edge')) return;
+            editingEdge = e.target;
+            const pos = e.renderedPosition;
+            editEdgeModal.style.left = pos.x + 'px';
+            editEdgeModal.style.top = pos.y + 'px';
+            editEdgeModal.classList.remove('hidden');
+            editEdgeInput.value = editingEdge.data('edgeLabel') || '';
+            setTimeout(() => { editEdgeInput.focus(); editEdgeInput.select(); }, 50);
+        });
+
+        function confirmEditEdge() {
+            if (editingEdge) {
+                editingEdge.data('edgeLabel', editEdgeInput.value.trim());
+            }
+            editEdgeModal.classList.add('hidden');
+            editingEdge = null;
+        }
+
+        function cancelEditEdge() {
+            editEdgeModal.classList.add('hidden');
+            editingEdge = null;
+        }
+
+        editEdgeInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') confirmEditEdge();
+            if (e.key === 'Escape') cancelEditEdge();
+        });
+
+        // ==========================================
+        // ВКЛАДКИ ИНСТРУМЕНТОВ
+        // ==========================================
+        function switchTab(name) {
+            document.querySelectorAll('.tool-panel').forEach(p => p.classList.add('hidden'));
+            document.querySelectorAll('.tool-tab').forEach(t => t.classList.remove('active-tab'));
+            document.getElementById('tab-' + name).classList.remove('hidden');
+            document.querySelector(`[data-tab="${name}"]`).classList.add('active-tab');
+        }
+
+        // ==========================================
+        // УТИЛИТЫ
+        // ==========================================
+        function addToolResult(data) {
+            let extent = cy.extent();
+            let cx = extent.x1 + extent.w / 2;
+            let cy_center = extent.y1 + extent.h / 2;
+            data.nodes.forEach((n, i) => {
+                const angle = (i / Math.max(data.nodes.length, 1)) * 2 * Math.PI;
+                cy.add({ ...n, position: { x: cx + 160 * Math.cos(angle), y: cy_center + 160 * Math.sin(angle) } });
+            });
+            data.edges.forEach(ed => cy.add(ed));
+            resetLayout();
+        }
+
+        function setToolState(btnId, statusId, loading, msg, isError) {
+            const btn = document.querySelector(`[data-btn="${btnId}"]`);
+            const status = document.getElementById(statusId + '-status');
+            if (!btn || !status) return;
+            btn.disabled = loading;
+            status.style.color = loading ? '#6B7280' : (isError ? '#F87171' : '#4ADE80');
+            status.textContent = msg;
+        }
+
+        // ==========================================
+        // ЕДИНАЯ ФУНКЦИЯ ЗАПРОСА ИНСТРУМЕНТА
+        // ==========================================
+        async function runTool(endpoint, inputId, statusKey, extraParams = {}) {
+            const target = document.getElementById(inputId)?.value.trim();
+            if (!target) { document.getElementById(inputId)?.focus(); return; }
+
+            // Собираем доп. параметры (API ключи и т.д.)
+            const params = new URLSearchParams({ target, ...extraParams });
+
+            // Nmap: режим сканирования
+            if (endpoint === 'nmap') {
+                const mode = document.getElementById('nmap-mode')?.value || 'quick';
+                params.set('mode', mode);
+            }
+            // Shodan: API ключ
+            if (endpoint === 'shodan') {
+                const key = document.getElementById('shodan-key')?.value.trim();
+                if (!key) { setToolState('shodan', 'shodan', false, '⚠ Введите API ключ', true); return; }
+                params.set('apikey', key);
+            }
+            // Censys: ID + Secret
+            if (endpoint === 'censys') {
+                const id = document.getElementById('censys-id')?.value.trim();
+                const secret = document.getElementById('censys-secret')?.value.trim();
+                if (!id || !secret) { setToolState('censys', 'censys', false, '⚠ Введите API ID и Secret', true); return; }
+                params.set('api_id', id);
+                params.set('api_secret', secret);
+            }
+            // ZoomEye: API ключ
+            if (endpoint === 'zoomeye') {
+                const key = document.getElementById('zoomeye-key')?.value.trim();
+                if (!key) { setToolState('zoomeye', 'zoomeye', false, '⚠ Введите API ключ', true); return; }
+                params.set('apikey', key);
+            }
+
+            setToolState(statusKey, statusKey, true, 'Выполняется...', false);
+            try {
+                const resp = await fetch(`http://localhost:5050/${endpoint}?${params.toString()}`);
+                const data = await resp.json();
+                if (data.error) {
+                    setToolState(statusKey, statusKey, false, '⚠ ' + data.error, true);
+                } else {
+                    addToolResult(data);
+                    const count = data.nodes ? data.nodes.length : 0;
+                    setToolState(statusKey, statusKey, false, `✓ Добавлено узлов: ${count}`, false);
+                }
+            } catch {
+                setToolState(statusKey, statusKey, false, '⚠ Сервер недоступен. Запустите server.py', true);
+            }
+        }
+
+    </script>
+</body>
+</html>
