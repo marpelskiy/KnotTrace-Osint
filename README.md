@@ -41,7 +41,7 @@
 
 ```bash
 # Клонирование репозитория
-git clone 
+git clone https://github.com/marpelskiy/KnotTrace-Osint.git
 cd KnotTrace
 
 
