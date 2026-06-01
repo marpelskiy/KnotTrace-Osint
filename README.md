@@ -1,5 +1,6 @@
-<div align="center">
-  ##ВЕРСИЯ 2.0 УЖЕ В РЕЛИЗАХ
+<h1 align="center">
+  🚨 <span style="color:red">СКАЧИВАЙТЕ УЛУЧШЕННУЮ ВЕРСИЮ 2.0 В RELEASES</span> 🚨
+</h1>
 <div align="center">
 
 # 🕸 KnotTrace
