@@ -1,4 +1,6 @@
 <div align="center">
+  ##ВЕРСИЯ 2.0 УЖЕ В РЕЛИЗАХ
+<div align="center">
 
 # 🕸 KnotTrace
 
